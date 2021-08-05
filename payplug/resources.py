@@ -10,6 +10,7 @@ class APIResource(with_metaclass(abc.ABCMeta)):
     """
     A simple API resource
     """
+
     def __init__(self, **resource_attributes):
         """
         :param resource_attributes: API resource parameters
@@ -62,13 +63,15 @@ class APIResource(with_metaclass(abc.ABCMeta)):
             exceptions.UnkownAPIResource when it's impossible to reconstruct the APIResource from its data.
         """
         if 'object' not in data:
-            raise exceptions.UnknownAPIResource('Missing `object` key in resource.')
+            raise exceptions.UnknownAPIResource(
+                'Missing `object` key in resource.')
 
         for reconstituable_api_resource_type in ReconstituableAPIResource.__subclasses__():
             if reconstituable_api_resource_type.object_type == data['object']:
                 return reconstituable_api_resource_type(**data)
 
-        raise exceptions.UnknownAPIResource('Unknown object `' + data['object'] + '`.')
+        raise exceptions.UnknownAPIResource(
+            'Unknown object `' + data['object'] + '`.')
 
     def _set_attributes(self, **attributes):
         """
@@ -88,7 +91,8 @@ class APIResource(with_metaclass(abc.ABCMeta)):
         self._set_attributes(**resource_attributes)
         for attribute, attribute_type in list(self._mapper.items()):
             if attribute in resource_attributes and isinstance(resource_attributes[attribute], dict):
-                setattr(self, attribute, attribute_type(**resource_attributes[attribute]))
+                setattr(self, attribute, attribute_type(
+                    **resource_attributes[attribute]))
 
     @property
     def _mapper(self):
@@ -162,7 +166,8 @@ class Payment(APIResource, VerifiableAPIResource, ReconstituableAPIResource):
         :rtype Payment
         """
         http_client = HttpClient()
-        response, _ = http_client.get(routes.url(routes.PAYMENT_RESOURCE, resource_id=self.id))
+        response, _ = http_client.get(routes.url(
+            routes.PAYMENT_RESOURCE, resource_id=self.id))
         return Payment(**response)
 
     def refund(self, **data):
@@ -250,7 +255,8 @@ class Refund(APIResource, VerifiableAPIResource, ReconstituableAPIResource):
         """
         http_client = HttpClient()
         response, _ = http_client.get(
-            routes.url(routes.REFUND_RESOURCE, resource_id=self.id, payment_id=self.payment_id)
+            routes.url(routes.REFUND_RESOURCE, resource_id=self.id,
+                       payment_id=self.payment_id)
         )
         return Refund(**response)
 
@@ -317,13 +323,15 @@ class APIResourceCollection(APIResource):
     """
     A class that contains multiple API resources
     """
+
     def __init__(self, expected_api_resource, **resource_attributes):
         """
         :param expected_api_resource: Type of collection object expected
         :type expected_api_resource: type(something that extends APIResource)
         :param resource_attributes: API resource parameters
         """
-        object.__setattr__(self, '_expected_api_resource', expected_api_resource)
+        object.__setattr__(self, '_expected_api_resource',
+                           expected_api_resource)
 
         super(APIResourceCollection, self).__init__(**resource_attributes)
         object.__setattr__(self, '_iterator', iter(self.data))
@@ -389,5 +397,59 @@ class OneyPaymentSimulation(APIResource):
     class Operation(APIResource):
         """
         An operation.
+        """
+        pass
+
+
+class InstallmentPlan(APIResource, VerifiableAPIResource, ReconstituableAPIResource):
+    """
+    An InstallmentPlans Resource
+    """
+    object_type = 'installment_plan'
+
+    @property
+    def _mapper(self):
+        """
+        Maps payment attributes to their specific types.
+
+        :see :func:`~APIResource._mapper`
+        """
+        return {
+            'hosted_payment': Payment.HostedPayment,
+            'notification': Payment.Notification,
+            'failure': Payment.Failure,
+            'billing': Payment.Billing,
+            'shipping': Payment.Shipping,
+        }
+
+    def _initialize(self, **resource_attributes):
+        """
+        Initialize a resource.
+        Default behavior is just to set all the attributes. You may want to override this.
+
+        :param resource_attributes: The resource attributes
+        """
+
+        schedules = []
+        if resource_attributes.get('schedule', []):
+            for schedule in resource_attributes['schedule']:
+                schedules.append(InstallmentPlan.Schedule(**schedule))
+        resource_attributes['schedule'] = schedules
+        super(InstallmentPlan, self)._initialize(**resource_attributes)
+
+    def get_consistent_resource(self):
+        """
+        :return an Installment Plan that you can trust.
+        :rtype InstallmentPlan
+        """
+        http_client = HttpClient()
+        response, _ = http_client.get(
+            routes.url(routes.INSTALLMENT_PLANS, resource_id=self.id)
+        )
+        return InstallmentPlan(**response)
+
+    class Schedule(APIResource):
+        """
+        Schedule information
         """
         pass
